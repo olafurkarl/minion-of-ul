@@ -21,7 +21,7 @@ bot.login(TOKEN);
 bot.on('ready', async () => {
   console.info(`Logged in as ${bot.user.tag}!`);
   const channel = <TextChannel> await bot.channels.fetch(CHANNEL_ID);
-  channel.send("Hello world");
+  channel.send("**I live to serve the Ul.**");
 
   games.forEach(game => {
     console.log(game);
@@ -33,21 +33,25 @@ bot.on('ready', async () => {
                 console.log(data)
                 const lines = data.split('\n');
                 console.log(lines.length)
-                let msg = "```Game Update:\n";
+                const turn = lines[1].split(" ")[1];
+                let msg = `Turn __${turn}__\n`;
                 lines.forEach(line => {
                     const cols = line.split('\t');
-                    console.log(cols.length)
-                    console.log(cols)
+ 
                     if (cols.length < 9) {
                         return;
                     }
                     const nation = cols[columns.NATION];
                     const status = parseInt(cols[columns.STATUS]);
-                    let statusMsg = "";
+                    msg += "\n";
+                    if (status === 2) { // 2 means finished
+                        msg += ":white_check_mark: ";
+                    } else {
+                        msg += ":x: "
+                    }
                     console.log(`status: ${status}`)
-                    msg += `\n${nation} has ${statuses[status]} their turn`;
+                    msg += `${nation} has ${statuses[status]} their turn`;
                 })
-                msg += "\n```";
                 channel.send(msg);
             });
         }
