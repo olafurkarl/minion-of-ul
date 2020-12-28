@@ -18,45 +18,61 @@ const statuses = ['not started', 'not finished', 'finished'];
 
 bot.login(TOKEN);
 
+const getChannel = async () => {
+    const channel = <TextChannel> await bot.channels.fetch(CHANNEL_ID);
+    return channel;
+}
+
 bot.on('ready', async () => {
   console.info(`Logged in as ${bot.user.tag}!`);
-  const channel = <TextChannel> await bot.channels.fetch(CHANNEL_ID);
+  const channel = await getChannel();
   channel.send("**I live to serve the Ul.**");
 
   games.forEach(game => {
     console.log(game);
-    const filePath = `${SAVE_GAME_DIR}/${game}/statusdump.txt`;
+    const filePath = `${SAVE_GAME_DIR}/${game}`;
     fs.watch(filePath, (event, filename) => {
-        console.log(event);
-        if (event === 'change') {
-            fs.readFile(filePath, 'utf8', (err, data) => {
+        if (filename === 'statusdump.txt' && event === 'change') {
+            fs.readFile(`${filePath}/${filename}`, 'utf8', (err, data) => {
                 console.log(data)
-                const lines = data.split('\n');
-                console.log(lines.length)
-                const turn = lines[1].split(" ")[1];
-                let msg = `Turn __${turn}__\n`;
-                lines.forEach(line => {
-                    const cols = line.split('\t');
- 
-                    if (cols.length < 9) {
-                        return;
-                    }
-                    const nation = cols[columns.NATION];
-                    const status = parseInt(cols[columns.STATUS]);
-                    msg += "\n";
-                    if (status === 2) { // 2 means finished
-                        msg += ":white_check_mark: ";
-                    } else {
-                        msg += ":x: "
-                    }
-                    console.log(`status: ${status}`)
-                    msg += `${nation} has ${statuses[status]} their turn`;
-                })
-                channel.send(msg);
+                if (data) {
+                    const lines = data.split('\n');
+                    console.log(lines.length)
+                    const turn = lines[1].split(" ")[1];
+                    let msg = `Turn __${turn}__\n`;
+                    lines.forEach(line => {
+                        const cols = line.split('\t');
+     
+                        if (cols.length < 9) {
+                            return;
+                        }
+                        const nation = cols[columns.NATION];
+                        const status = parseInt(cols[columns.STATUS]);
+                        msg += "\n";
+                        if (status === 2) { // 2 means finished
+                            msg += ":white_check_mark: ";
+                        } else {
+                            msg += ":x: "
+                        }
+                        console.log(`status: ${status}`)
+                        msg += `${nation} has ${statuses[status]} their turn`;
+                    })
+                    sendWithTimeout(msg, 500);
+                }
             });
         }
     });
   });
 
 });
+
+let sendTimeout: NodeJS.Timeout;
+
+const sendWithTimeout = async (message: string, timeout: number) => {
+    sendTimeout = setTimeout(async () => {
+        clearTimeout(sendTimeout);
+        const channel = await getChannel();
+        channel.send(message);
+    }, timeout)
+}
 
