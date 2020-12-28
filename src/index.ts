@@ -10,7 +10,7 @@ const SAVE_GAME_DIR = `${process.env.HOME}/.dominions5/savedgames`
 const games = ['bot_test'];
 
 const columns = {
-    STATUS: 4,
+    STATUS: 5,
     NATION: 7
 }
 
