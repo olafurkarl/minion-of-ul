@@ -37,26 +37,28 @@ bot.on('ready', async () => {
                 console.log(data)
                 if (data) {
                     const lines = data.split('\n');
-                    const turn = lines[1].split(" ")[1];
-                    let msg = `__Game__: ${game} __Turn__: ${turn}\n`;
-                    lines.forEach(line => {
-                        const cols = line.split('\t');
-     
-                        if (cols.length < 9) {
-                            return;
-                        }
-                        const nation = cols[columns.NATION];
-                        const status = parseInt(cols[columns.STATUS]);
-                        msg += "\n";
-                        if (status === 2) { // 2 means finished
-                            msg += ":white_check_mark: ";
-                        } else {
-                            msg += ":x: "
-                        }
-                        console.log(`status: ${status}`)
-                        msg += `${nation} has ${statuses[status]} their turn`;
-                    })
-                    sendWithTimeout(msg, 500);
+                    const turn = parseInt(lines[1].split(" ")[1]);
+                    if (turn > 0) {
+                        let msg = `__Game__: ${game} __Turn__: ${turn}\n`;
+                        lines.forEach(line => {
+                            const cols = line.split('\t');
+         
+                            if (cols.length < 9) {
+                                return;
+                            }
+                            const nation = cols[columns.NATION];
+                            const status = parseInt(cols[columns.STATUS]);
+                            msg += "\n";
+                            if (status === 2) { // 2 means finished
+                                msg += ":white_check_mark: ";
+                            } else {
+                                msg += ":x: "
+                            }
+                            console.log(`status: ${status}`)
+                            msg += `${nation} has ${statuses[status]} their turn`;
+                        })
+                        sendWithTimeout(msg, 500);
+                    }
                 }
             });
         }
