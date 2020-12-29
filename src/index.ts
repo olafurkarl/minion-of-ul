@@ -37,9 +37,8 @@ bot.on('ready', async () => {
                 console.log(data)
                 if (data) {
                     const lines = data.split('\n');
-                    console.log(lines.length)
                     const turn = lines[1].split(" ")[1];
-                    let msg = `Turn __${turn}__\n`;
+                    let msg = `__Game__: ${game} __Turn__: ${turn}\n`;
                     lines.forEach(line => {
                         const cols = line.split('\t');
      
