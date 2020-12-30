@@ -10,6 +10,7 @@ const SAVE_GAME_DIR = `${process.env.HOME}/.dominions5/savedgames`
 const games = ['bot_test'];
 
 const columns = {
+    BOT_OR_NOT: 3, 
     STATUS: 5,
     NATION: 7
 }
@@ -40,23 +41,33 @@ bot.on('ready', async () => {
                     const turn = parseInt(lines[1].split(" ")[1]);
                     if (turn > 0) {
                         let msg = `__Game__: ${game} __Turn__: ${turn}\n`;
+                        const bots: Array<string> = [];
                         lines.forEach(line => {
                             const cols = line.split('\t');
          
                             if (cols.length < 9) {
                                 return;
                             }
+
+                            const isBot = parseInt(cols[columns.BOT_OR_NOT]) === 2;
+
                             const nation = cols[columns.NATION];
-                            const status = parseInt(cols[columns.STATUS]);
-                            msg += "\n";
-                            if (status === 2) { // 2 means finished
-                                msg += ":white_check_mark: ";
+                            if (isBot) {
+                                bots.push(nation);
                             } else {
-                                msg += ":x: "
+                                const status = parseInt(cols[columns.STATUS]);
+                                msg += "\n";
+                                if (status === 2) { // 2 means finished
+                                    msg += ":white_check_mark: ";
+                                } else {
+                                    msg += ":x: "
+                                }
+                                console.log(`status: ${status}`)
+                                msg += `${nation} has ${statuses[status]} their turn`;
                             }
-                            console.log(`status: ${status}`)
-                            msg += `${nation} has ${statuses[status]} their turn`;
                         })
+
+                        msg = addBotMsg(msg, bots);
                         sendWithTimeout(msg, 500);
                     }
                 }
@@ -64,8 +75,18 @@ bot.on('ready', async () => {
         }
     });
   });
-
 });
+
+const addBotMsg = (msg: string, bots: Array<string>): string => {
+    msg += "\n:robot: AI: ";
+    for (let i = 0; i < bots.length; i++) {
+        msg += bots[i];
+        if (i !== bots.length - 1) {
+            msg += ", ";
+        }
+    }
+    return msg;
+}
 
 let sendTimeout: NodeJS.Timeout;
 
