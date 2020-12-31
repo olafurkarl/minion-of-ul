@@ -42,32 +42,9 @@ bot.on('ready', async () => {
                     if (turn > 0) {
                         let msg = `__Game__: ${game} __Turn__: ${turn}\n`;
                         const bots: Array<string> = [];
-                        lines.forEach(line => {
-                            const cols = line.split('\t');
-         
-                            if (cols.length < 9) {
-                                return;
-                            }
-
-                            const isBot = parseInt(cols[columns.BOT_OR_NOT]) === 2;
-
-                            const nation = cols[columns.NATION];
-                            if (isBot) {
-                                bots.push(nation);
-                            } else {
-                                const status = parseInt(cols[columns.STATUS]);
-                                msg += "\n";
-                                if (status === 2) { // 2 means finished
-                                    msg += ":white_check_mark: ";
-                                } else {
-                                    msg += ":x: "
-                                }
-                                console.log(`status: ${status}`)
-                                msg += `${nation} has ${statuses[status]} their turn`;
-                            }
-                        })
-
-                        msg = addBotMsg(msg, bots);
+                        const dead: Array<string> = [];
+                        msg = addNationMsg(lines, msg, bots, dead);
+                        msg = addBotMsg(msg, bots, dead);
                         sendWithTimeout(msg, 500);
                     }
                 }
@@ -77,11 +54,48 @@ bot.on('ready', async () => {
   });
 });
 
-const addBotMsg = (msg: string, bots: Array<string>): string => {
+const addNationMsg = (lines: Array<string>, msg: string, bots: Array<string>, dead: Array<string>): string => {
+    lines.forEach(line => {
+        const cols = line.split('\t');
+
+        if (cols.length < 9) {
+            return;
+        }
+
+        const isDead = parseInt(cols[columns.BOT_OR_NOT]) === -1;
+        const isBot = parseInt(cols[columns.BOT_OR_NOT]) === 2;
+
+        const nation = cols[columns.NATION];
+        if (isDead) {
+            dead.push(nation);
+        } else if (isBot) {
+            bots.push(nation);
+        } else {
+            const status = parseInt(cols[columns.STATUS]);
+            msg += "\n";
+            if (status === 2) { // 2 means finished
+                msg += ":white_check_mark: ";
+            } else {
+                msg += ":x: "
+            }
+            msg += `${nation} has ${statuses[status]} their turn`;
+        }
+    })
+    return msg;
+}
+
+const addBotMsg = (msg: string, bots: Array<string>, dead: Array<string>): string => {
     msg += "\n:robot: AI: ";
     for (let i = 0; i < bots.length; i++) {
         msg += bots[i];
         if (i !== bots.length - 1) {
+            msg += ", ";
+        }
+    }
+    msg += "\n:skull: Dead: ";
+    for (let i = 0; i < dead.length; i++) {
+        msg += dead[i];
+        if (i !== dead.length - 1) {
             msg += ", ";
         }
     }
