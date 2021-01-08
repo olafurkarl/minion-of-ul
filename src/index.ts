@@ -74,9 +74,9 @@ const addNationMsg = (lines: Array<string>, msg: string, bots: Array<string>, de
             const status = parseInt(cols[columns.STATUS]);
             msg += "\n";
             if (status === 2) { // 2 means finished
-                msg += ":white_check_mark: ";
+                msg += "✅ ";
             } else {
-                msg += ":x: "
+                msg += "❌ "
             }
             msg += `${nation} has ${statuses[status]} their turn`;
         }
@@ -85,20 +85,24 @@ const addNationMsg = (lines: Array<string>, msg: string, bots: Array<string>, de
 }
 
 const addBotMsg = (msg: string, bots: Array<string>, dead: Array<string>): string => {
-    msg += "\n:robot: AI: ";
+    msg += "\n🤖 AI: ";
     for (let i = 0; i < bots.length; i++) {
         msg += bots[i];
         if (i !== bots.length - 1) {
             msg += ", ";
         }
     }
-    msg += "\n:skull: Dead: ";
-    for (let i = 0; i < dead.length; i++) {
-        msg += dead[i];
-        if (i !== dead.length - 1) {
-            msg += ", ";
+
+    if (dead.length > 0) {
+        msg += "\n💀 Dead: ";
+        for (let i = 0; i < dead.length; i++) {
+            msg += dead[i];
+            if (i !== dead.length - 1) {
+                msg += ", ";
+            }
         }
     }
+
     return msg;
 }
 
