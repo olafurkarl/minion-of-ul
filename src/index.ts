@@ -7,7 +7,7 @@ config();
 const TOKEN = process.env.TOKEN;
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const SAVE_GAME_DIR = `${process.env.HOME}/.dominions5/savedgames`
-const games = ['bot_test'];
+const games = ['test_bot'];
 
 const columns = {
     BOT_OR_NOT: 3, 
@@ -24,35 +24,114 @@ const getChannel = async () => {
     return channel;
 }
 
+let currentTurn: number = -1;
+
+interface GameData {
+    [key: string]: {
+        statusDump: string
+        gamePin: Discord.Message
+        turnStatusMessage: Discord.Message;
+    }
+}
+
+const gameData: GameData = {}
+
 bot.on('ready', async () => {
   console.info(`Logged in as ${bot.user.tag}!`);
   const channel = await getChannel();
   channel.send("**I live to serve the Ul.**");
 
-  games.forEach(game => {
+  games.forEach(async (game) => {
     console.log(game);
+
+    // load initial game data from file system and discord
+
+    const pins = await channel.messages.fetchPinned();
+    let gamePin: Discord.Message;
+    pins.forEach((pin) => {
+        if (pin.content.includes(`__Game__: ${game}`)) {
+            gamePin = pin;
+        }
+    })
+
+    gameData[game] = {
+        statusDump: '',
+        gamePin,
+        turnStatusMessage: undefined
+    }
+  });
+
+  games.forEach(async (game) => {
+    console.log(game);
+
     const filePath = `${SAVE_GAME_DIR}/${game}`;
-    fs.watch(filePath, (event, filename) => {
+    fs.watch(filePath, async (event, filename) => {
         if (filename === 'statusdump.txt' && event === 'change') {
-            fs.readFile(`${filePath}/${filename}`, 'utf8', (err, data) => {
-                console.log(data)
-                if (data) {
-                    const lines = data.split('\n');
-                    const turn = parseInt(lines[1].split(" ")[1]);
-                    if (turn > 0) {
-                        let msg = `__Game__: ${game} __Turn__: ${turn}\n`;
-                        const bots: Array<string> = [];
-                        const dead: Array<string> = [];
-                        msg = addNationMsg(lines, msg, bots, dead);
-                        msg = addBotMsg(msg, bots, dead);
-                        sendWithTimeout(msg, 500);
+            const statusDump: string = await readFile(`${filePath}/${filename}`);
+            
+            // no new information, return
+            if (gameData[game] && gameData[game].statusDump === statusDump) {
+                return;
+            }
+
+            if (statusDump) {
+                // set statusDump
+                gameData[game].statusDump = statusDump;
+                
+                const lines = statusDump.split('\n');
+                const turn = parseInt(lines[1].split(" ")[1]);
+                if (turn > 0) {
+                    let msg = `__Game__: ${game} __Turn__: ${turn}`;
+
+                    const bots: Array<string> = [];
+                    const dead: Array<string> = [];
+                    msg = addNationMsg(lines, msg, bots, dead);
+                    msg = addBotMsg(msg, bots, dead);
+
+                    let { turnStatusMessage, gamePin } = gameData[game];
+
+                    if (currentTurn != turn) {
+                        currentTurn = turn;
+                        if (turnStatusMessage) {
+                            turnStatusMessage = undefined;
+                        }
+                    }
+
+                    if (!turnStatusMessage) {
+                        turnStatusMessage = await sendWithTimeout(msg, 500);
+
+                        // update latest status message
+                        gameData[game].turnStatusMessage = turnStatusMessage;
+                    } else {
+                        turnStatusMessage.edit(msg);
+                    }
+
+                    // update pin
+                    if (gamePin) {
+                        gamePin.edit(msg);
+                    } else {
+                        // if we don't have a pin, try to make one
+                        if (turnStatusMessage && turnStatusMessage.pinnable) {
+                            turnStatusMessage.pin();
+                        }
                     }
                 }
-            });
+            }
         }
     });
   });
 });
+
+const readFile = (dir: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        fs.readFile(dir, 'utf8', (err, data) => {
+            if (err) {
+                reject(err);
+            }
+            resolve(data);
+        });
+    });
+}
 
 const addNationMsg = (lines: Array<string>, msg: string, bots: Array<string>, dead: Array<string>): string => {
     lines.forEach(line => {
@@ -85,11 +164,13 @@ const addNationMsg = (lines: Array<string>, msg: string, bots: Array<string>, de
 }
 
 const addBotMsg = (msg: string, bots: Array<string>, dead: Array<string>): string => {
-    msg += "\n🤖 AI: ";
-    for (let i = 0; i < bots.length; i++) {
-        msg += bots[i];
-        if (i !== bots.length - 1) {
-            msg += ", ";
+    if (bots.length > 0) {
+        msg += "\n🤖 AI: ";
+        for (let i = 0; i < bots.length; i++) {
+            msg += bots[i];
+            if (i !== bots.length - 1) {
+                msg += ", ";
+            }
         }
     }
 
@@ -108,11 +189,16 @@ const addBotMsg = (msg: string, bots: Array<string>, dead: Array<string>): strin
 
 let sendTimeout: NodeJS.Timeout;
 
-const sendWithTimeout = async (message: string, timeout: number) => {
-    sendTimeout = setTimeout(async () => {
-        clearTimeout(sendTimeout);
-        const channel = await getChannel();
-        channel.send(message);
-    }, timeout)
+const sendWithTimeout = async (message: string, timeout: number): Promise<Discord.Message> => {
+    let finalMessage: Discord.Message;
+    return new Promise<Discord.Message>((resolve, reject) => {
+        sendTimeout = setTimeout(async () => {
+            clearTimeout(sendTimeout);
+            console.log("sending")
+            const channel = await getChannel();
+            finalMessage = await channel.send(message);
+            resolve(finalMessage);
+        }, timeout)
+    })
 }
 
