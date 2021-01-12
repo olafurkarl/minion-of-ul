@@ -5,7 +5,7 @@ import { TextChannel } from "discord.js";
 const bot = new Discord.Client();
 config();
 const TOKEN = process.env.TOKEN;
-const CHANNEL_ID = process.env.CHANNEL_ID;
+const SERVER_ID = process.env.SERVER_ID;
 const SAVE_GAME_DIR = `${process.env.HOME}/.dominions5/savedgames`
 const games = ['test_bot'];
 
@@ -19,18 +19,18 @@ const statuses = ['not started', 'not finished', 'finished'];
 
 bot.login(TOKEN);
 
-const getChannel = async () => {
-    const channel = <TextChannel> await bot.channels.fetch(CHANNEL_ID);
+const getChannel = async (name: string) => {
+    const server = await bot.guilds.fetch(SERVER_ID);
+    const channel = <TextChannel> server.channels.cache.find(channel => channel.name === name)
     return channel;
 }
-
-let currentTurn: number = -1;
 
 interface GameData {
     [key: string]: {
         statusDump: string
         gamePin: Discord.Message
         turnStatusMessage: Discord.Message;
+        currentTurn: number
     }
 }
 
@@ -38,11 +38,10 @@ const gameData: GameData = {}
 
 bot.on('ready', async () => {
   console.info(`Logged in as ${bot.user.tag}!`);
-  const channel = await getChannel();
-  channel.send("**I live to serve the Ul.**");
 
   games.forEach(async (game) => {
-    console.log(game);
+    const channel = await getChannel(game);
+    channel.send("**I live to serve the Ul.**");
 
     // load initial game data from file system and discord
 
@@ -57,12 +56,13 @@ bot.on('ready', async () => {
     gameData[game] = {
         statusDump: '',
         gamePin,
-        turnStatusMessage: undefined
+        turnStatusMessage: undefined,
+        currentTurn: -1
     }
   });
 
   games.forEach(async (game) => {
-    console.log(game);
+    const channel = await getChannel(game);
 
     const filePath = `${SAVE_GAME_DIR}/${game}`;
     fs.watch(filePath, async (event, filename) => {
@@ -90,15 +90,15 @@ bot.on('ready', async () => {
 
                     let { turnStatusMessage, gamePin } = gameData[game];
 
-                    if (currentTurn != turn) {
-                        currentTurn = turn;
+                    if (gameData[game].currentTurn != turn) {
+                        gameData[game].currentTurn = turn;
                         if (turnStatusMessage) {
                             turnStatusMessage = undefined;
                         }
                     }
 
                     if (!turnStatusMessage) {
-                        turnStatusMessage = await sendWithTimeout(msg, 500);
+                        turnStatusMessage = await sendWithTimeout(msg, 500, channel);
 
                         // update latest status message
                         gameData[game].turnStatusMessage = turnStatusMessage;
@@ -189,13 +189,12 @@ const addBotMsg = (msg: string, bots: Array<string>, dead: Array<string>): strin
 
 let sendTimeout: NodeJS.Timeout;
 
-const sendWithTimeout = async (message: string, timeout: number): Promise<Discord.Message> => {
+const sendWithTimeout = async (message: string, timeout: number, channel: TextChannel): Promise<Discord.Message> => {
     let finalMessage: Discord.Message;
     return new Promise<Discord.Message>((resolve, reject) => {
         sendTimeout = setTimeout(async () => {
             clearTimeout(sendTimeout);
             console.log("sending")
-            const channel = await getChannel();
             finalMessage = await channel.send(message);
             resolve(finalMessage);
         }, timeout)
