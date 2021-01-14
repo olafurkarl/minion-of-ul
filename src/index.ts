@@ -7,7 +7,7 @@ config();
 const TOKEN = process.env.TOKEN;
 const SERVER_ID = process.env.SERVER_ID;
 const SAVE_GAME_DIR = `${process.env.HOME}/.dominions5/savedgames`
-const games = ['test_bot'];
+const games = ['test_omni'];
 
 const columns = {
     BOT_OR_NOT: 3, 
@@ -15,7 +15,7 @@ const columns = {
     NATION: 7
 }
 
-const statuses = ['not started', 'not finished', 'finished'];
+enum TurnStatus { 'not started', 'not finished', 'finished' };
 
 bot.login(TOKEN);
 
@@ -29,7 +29,7 @@ interface GameData {
     [key: string]: {
         statusDump: string
         gamePin: Discord.Message
-        turnStatusMessage: Discord.Message;
+        turnStatusPost: Discord.Message;
         currentTurn: number
     }
 }
@@ -56,7 +56,7 @@ bot.on('ready', async () => {
     gameData[game] = {
         statusDump: '',
         gamePin,
-        turnStatusMessage: undefined,
+        turnStatusPost: undefined,
         currentTurn: -1
     }
   });
@@ -74,6 +74,7 @@ bot.on('ready', async () => {
                 return;
             }
 
+            console.log('statusDump', statusDump);
             if (statusDump) {
                 // set statusDump
                 gameData[game].statusDump = statusDump;
@@ -81,29 +82,27 @@ bot.on('ready', async () => {
                 const lines = statusDump.split('\n');
                 const turn = parseInt(lines[1].split(" ")[1]);
                 if (turn > 0) {
-                    let msg = `__Game__: ${game} __Turn__: ${turn}`;
 
-                    const bots: Array<string> = [];
-                    const dead: Array<string> = [];
-                    msg = addNationMsg(lines, msg, bots, dead);
-                    msg = addBotMsg(msg, bots, dead);
+                    const nationStatus = getNationStatus(lines);
+                    console.log(nationStatus);
+                    let msg = createTurnStatusString(nationStatus, game, turn);
 
-                    let { turnStatusMessage, gamePin } = gameData[game];
+                    let { turnStatusPost, gamePin } = gameData[game];
 
                     if (gameData[game].currentTurn != turn) {
                         gameData[game].currentTurn = turn;
-                        if (turnStatusMessage) {
-                            turnStatusMessage = undefined;
+                        if (turnStatusPost) {
+                            turnStatusPost = undefined;
                         }
                     }
 
-                    if (!turnStatusMessage) {
-                        turnStatusMessage = await sendWithTimeout(msg, 500, channel);
+                    if (!turnStatusPost) {
+                        turnStatusPost = await sendWithTimeout(msg, 500, channel);
 
                         // update latest status message
-                        gameData[game].turnStatusMessage = turnStatusMessage;
+                        gameData[game].turnStatusPost = turnStatusPost;
                     } else {
-                        turnStatusMessage.edit(msg);
+                        turnStatusPost.edit(msg);
                     }
 
                     // update pin
@@ -111,9 +110,15 @@ bot.on('ready', async () => {
                         gamePin.edit(msg);
                     } else {
                         // if we don't have a pin, try to make one
-                        if (turnStatusMessage && turnStatusMessage.pinnable) {
-                            turnStatusMessage.pin();
+                        if (turnStatusPost && turnStatusPost.pinnable) {
+                            turnStatusPost.pin();
+                            gameData[game].gamePin = turnStatusPost;
                         }
+                    }
+
+                    // start game if all players except Omniscience have finished
+                    if (nationStatus.hasOmniscience && nationStatus.allDone) {
+                        startNextTurn(game);
                     }
                 }
             }
@@ -121,6 +126,14 @@ bot.on('ready', async () => {
     });
   });
 });
+
+const startNextTurn = (game: string) => {
+    const domCmdPath = `${SAVE_GAME_DIR}/${game}/domcmd`;
+    fs.writeFile(domCmdPath, 'settimeleft 5', (err) => {
+        if (err) return console.log(err);
+        console.log(domCmdPath);
+    });
+}
 
 const readFile = (dir: string): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -133,11 +146,33 @@ const readFile = (dir: string): Promise<string> => {
     });
 }
 
-const addNationMsg = (lines: Array<string>, msg: string, bots: Array<string>, dead: Array<string>): string => {
+interface Player {
+    nation: string,
+    status: TurnStatus,
+}
+
+interface NationStatus {
+    players: Array<Player>,
+    bots: Array<string>,
+    dead: Array<string>,
+    allDone: boolean,
+    hasOmniscience: boolean,
+}
+
+const getNationStatus = (lines: Array<string>): NationStatus => {
+    const nationStatus: NationStatus = {
+        players: [],
+        bots: [],
+        dead: [],
+        allDone: false,
+        hasOmniscience: false,
+    }
+
+    let done = 0;
     lines.forEach(line => {
         const cols = line.split('\t');
 
-        if (cols.length < 9) {
+        if (cols.length < 9) { // skip header
             return;
         }
 
@@ -145,45 +180,70 @@ const addNationMsg = (lines: Array<string>, msg: string, bots: Array<string>, de
         const isBot = parseInt(cols[columns.BOT_OR_NOT]) === 2;
 
         const nation = cols[columns.NATION];
-        if (isDead) {
-            dead.push(nation);
-        } else if (isBot) {
-            bots.push(nation);
-        } else {
-            const status = parseInt(cols[columns.STATUS]);
-            msg += "\n";
-            if (status === 2) { // 2 means finished
-                msg += "✅ ";
-            } else {
-                msg += "❌ "
-            }
-            msg += `${nation} has ${statuses[status]} their turn`;
+
+        const isOmni = nation === 'Omniscience';
+
+        if (isOmni) {
+            nationStatus.hasOmniscience = true;
+            return;
         }
+        if (isDead) {
+            nationStatus.dead.push(nation);
+            return;
+        }
+        if (isBot) {
+            nationStatus.bots.push(nation);
+            return;
+        }
+        // we have a player!
+        const status = parseInt(cols[columns.STATUS]);
+        if (status === TurnStatus.finished) {
+            done += 1;
+        }
+        nationStatus.players.push({
+            nation,
+            status,
+        })
     })
-    return msg;
+    if (done === nationStatus.players.length) {
+        nationStatus.allDone = true;
+    }
+    return nationStatus;
 }
 
-const addBotMsg = (msg: string, bots: Array<string>, dead: Array<string>): string => {
-    if (bots.length > 0) {
+const createTurnStatusString = (nationStatus: NationStatus, game: string, turn: number): string => {
+    let msg = `__Game__: ${game} __Turn__: ${turn}`;
+    nationStatus.players.forEach(player => {
+        msg += "\n";
+        const { nation, status } = player;
+        if (status === TurnStatus.finished) {
+            msg += "✅ ";
+        } else {
+            msg += "❌ "
+        }
+        msg += `${nation} has ${TurnStatus[status]} their turn`;
+    })
+    if (nationStatus.bots.length > 0) {
         msg += "\n🤖 AI: ";
-        for (let i = 0; i < bots.length; i++) {
-            msg += bots[i];
-            if (i !== bots.length - 1) {
+        for (let i = 0; i < nationStatus.bots.length; i++) {
+            msg += nationStatus.bots[i];
+            if (i !== nationStatus.bots.length - 1) {
                 msg += ", ";
             }
         }
     }
-
-    if (dead.length > 0) {
+    if (nationStatus.dead.length > 0) {
         msg += "\n💀 Dead: ";
-        for (let i = 0; i < dead.length; i++) {
-            msg += dead[i];
-            if (i !== dead.length - 1) {
+        for (let i = 0; i < nationStatus.dead.length; i++) {
+            msg += nationStatus.dead[i];
+            if (i !== nationStatus.dead.length - 1) {
                 msg += ", ";
             }
         }
     }
-
+    if (nationStatus.hasOmniscience) {
+        msg += "\n🧿 This game is being watched carefully"
+    }
     return msg;
 }
 
@@ -194,7 +254,6 @@ const sendWithTimeout = async (message: string, timeout: number, channel: TextCh
     return new Promise<Discord.Message>((resolve, reject) => {
         sendTimeout = setTimeout(async () => {
             clearTimeout(sendTimeout);
-            console.log("sending")
             finalMessage = await channel.send(message);
             resolve(finalMessage);
         }, timeout)
