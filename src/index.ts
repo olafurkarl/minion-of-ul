@@ -61,6 +61,32 @@ bot.on('message', message => {
           },
         formatter = new Intl.DateTimeFormat([], options);
         message.channel.send(formatter.format(new Date()));
+    } else if (command === 'svenktime') {
+        let options = {
+            timeZone: 'Europe/Stockholm',
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: 'numeric',
+            second: 'numeric',
+          },
+        formatter = new Intl.DateTimeFormat([], options);
+        message.channel.send(formatter.format(new Date()));
+    }
+
+    else if (command === 'bjanktime') {
+        let options = {
+            timeZone: 'Europe/Copenhagen',
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: 'numeric',
+            second: 'numeric',
+          },
+        formatter = new Intl.DateTimeFormat([], options);
+        message.channel.send(formatter.format(new Date()));
     }
     // other commands...
 });
@@ -70,7 +96,7 @@ bot.on('ready', async () => {
 
   games.forEach(async (game) => {
     const channel = await getChannel(game);
-    channel.send("**I live to serve the Ul.**");
+    // channel.send("**I live to serve the Ul.**");
 
     // load initial game data from file system and discord
 
