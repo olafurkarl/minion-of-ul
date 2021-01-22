@@ -2,6 +2,7 @@ import { config } from "dotenv"
 import * as Discord from 'discord.js'
 import * as fs from 'fs';
 import { TextChannel } from "discord.js";
+import { hostGame } from './host';
 const bot = new Discord.Client();
 config();
 const TOKEN = process.env.TOKEN;
@@ -35,6 +36,34 @@ interface GameData {
 }
 
 const gameData: GameData = {}
+
+bot.on('message', message => {
+    const prefix = "!";
+    if (!message.content.startsWith(prefix) || message.author.bot) return;
+
+    const args = message.content.slice(prefix.length).trim().split(/ +/);
+    const command = args.shift().toLowerCase();
+
+    if (command === 'ping') {
+        message.channel.send('Pong.');
+    } else if (command === 'test') {
+        hostGame();
+        message.channel.send('Boop.');
+    } else if (command === 'ooltime') {
+        let options = {
+            timeZone: 'Australia/Sydney',
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: 'numeric',
+            second: 'numeric',
+          },
+        formatter = new Intl.DateTimeFormat([], options);
+        message.channel.send(formatter.format(new Date()));
+    }
+    // other commands...
+});
 
 bot.on('ready', async () => {
   console.info(`Logged in as ${bot.user.tag}!`);
@@ -222,7 +251,7 @@ const createTurnStatusString = (nationStatus: NationStatus, game: string, turn: 
             msg += "❌ "
         }
         msg += `${nation} has ${TurnStatus[status]} their turn`;
-    })
+    });
     if (nationStatus.bots.length > 0) {
         msg += "\n🤖 AI: ";
         for (let i = 0; i < nationStatus.bots.length; i++) {
