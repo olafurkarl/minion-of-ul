@@ -53,6 +53,11 @@ export const commands: Commands = {
     perhaps: (message: Discord.Message) => {
         const eChars = getRandomInt(5);
         const aChars = getRandomInt(5);
-        message.channel.send(`Pe${new Array(eChars).join('e')}rha${new Array(aChars).join('a')}ps.`);
+        const capsPerhaps = getRandomInt(2) === 1;
+        let perhaps = `Pe${new Array(eChars).join('e')}rha${new Array(aChars).join('a')}ps.`;
+        if (capsPerhaps) {
+            perhaps = perhaps.toUpperCase();
+        }
+        message.channel.send(perhaps);
     }
 }
