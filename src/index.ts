@@ -2,7 +2,7 @@ import { config } from "dotenv"
 import * as Discord from 'discord.js'
 import * as fs from 'fs';
 import { TextChannel } from "discord.js";
-import { hostGame } from './host';
+import { commands } from './commands';
 const bot = new Discord.Client();
 config();
 const TOKEN = process.env.TOKEN;
@@ -44,51 +44,7 @@ bot.on('message', message => {
     const args = message.content.slice(prefix.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
-    if (command === 'ping') {
-        message.channel.send('Pong.');
-    } else if (command === 'test') {
-        hostGame();
-        message.channel.send('Boop.');
-    } else if (command === 'ooltime') {
-        let options = {
-            timeZone: 'Australia/Sydney',
-            year: 'numeric',
-            month: 'numeric',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: 'numeric',
-            second: 'numeric',
-          },
-        formatter = new Intl.DateTimeFormat([], options);
-        message.channel.send(formatter.format(new Date()));
-    } else if (command === 'svenktime') {
-        let options = {
-            timeZone: 'Europe/Stockholm',
-            year: 'numeric',
-            month: 'numeric',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: 'numeric',
-            second: 'numeric',
-          },
-        formatter = new Intl.DateTimeFormat([], options);
-        message.channel.send(formatter.format(new Date()));
-    }
-
-    else if (command === 'bjanktime') {
-        let options = {
-            timeZone: 'Europe/Copenhagen',
-            year: 'numeric',
-            month: 'numeric',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: 'numeric',
-            second: 'numeric',
-          },
-        formatter = new Intl.DateTimeFormat([], options);
-        message.channel.send(formatter.format(new Date()));
-    }
-    // other commands...
+    commands[command](message, bot);
 });
 
 bot.on('ready', async () => {
