@@ -44,7 +44,9 @@ bot.on('message', message => {
     const args = message.content.slice(prefix.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
-    commands[command](message, bot);
+    if (commands[command]) {
+        commands[command](message, bot);
+    }
 });
 
 bot.on('ready', async () => {

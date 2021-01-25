@@ -24,6 +24,32 @@ const getRandomInt = (max: number) => {
     return Math.floor(Math.random() * Math.floor(max));
 }
 
+const getGoblinMessage = (): string => {
+    const typesOfSkveh = [
+        'skvEH',
+        'sqwEH',
+        'squEH',
+        'skwEH',
+    ]
+    let totalSkveh = '';
+    const skvehCount = getRandomInt(8) + 1;
+    for (let i = 0; i < skvehCount; i++) {
+        const skvehType = getRandomInt(3);
+        let skveh = typesOfSkveh[skvehType];
+        const eCount = getRandomInt(5) + 2; // 1 for minimum, 1 for js quirk
+        const hCount = getRandomInt(3) + 2; // 1 for minimum, 1 for js quirk
+        skveh = skveh.replace('H', new Array(hCount).join('h'))
+        skveh = skveh.replace('E', new Array(eCount).join('e'))
+
+        const capsSkveh = getRandomInt(3) === 1;
+        if (capsSkveh) {
+            skveh = skveh.toUpperCase();
+        }
+        totalSkveh += skveh + ' ';
+    }
+    return totalSkveh;
+}
+
 export const commands: Commands = {
     ping: (message: Discord.Message) => {
         message.channel.send('Pong.');
@@ -64,7 +90,7 @@ export const commands: Commands = {
         const hatCount = getRandomInt(7) + 1;
         let hat = '';
         for (let i = 0; i < hatCount; i++) {
-            const capsHat = getRandomInt(4) === 1;
+            const capsHat = getRandomInt(2) === 1;
             const hatChars = getRandomInt(5);
             let extraHat = `ha${new Array(hatChars).join('a')}t`
 
@@ -76,5 +102,28 @@ export const commands: Commands = {
         }
         message.channel.send(hat);
     },
-       
+    perbe: (message: Discord.Message) => {
+        message.channel.send('https://imgflip.com/i/4v7hox');
+    },
+    goblin: (message: Discord.Message) => {
+        message.channel.send(getGoblinMessage());
+    },
+    skveh: (message: Discord.Message) => {
+        message.channel.send(getGoblinMessage());
+    },
+    sqwee: (message: Discord.Message) => {
+        message.channel.send(getGoblinMessage());
+    },
+    noh: (message: Discord.Message) => {
+        const howManyNoh = getRandomInt(4) + 1;
+        let totalNoh = '';
+        for (let i = 0; i < howManyNoh; i++) {
+            const oChars = getRandomInt(8) + 1;
+            const hChars = getRandomInt(8) + 1;
+            let noh = `no${new Array(oChars).join('o')}${new Array(hChars).join('h')}h`
+
+            totalNoh += noh + ' '
+        }
+        message.channel.send(totalNoh);
+    }
 }
