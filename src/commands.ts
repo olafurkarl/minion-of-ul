@@ -22,7 +22,7 @@ const sendIfServerGuildOrPM = (message: Discord.Message, stringToSend: string) =
 
 const getRandomInt = (max: number) => {
     return Math.floor(Math.random() * Math.floor(max));
-  }
+}
 
 export const commands: Commands = {
     ping: (message: Discord.Message) => {
@@ -59,5 +59,22 @@ export const commands: Commands = {
             perhaps = perhaps.toUpperCase();
         }
         message.channel.send(perhaps);
-    }
+    },
+    hat: (message: Discord.Message) => {
+        const hatCount = getRandomInt(7) + 1;
+        let hat = '';
+        for (let i = 0; i < hatCount; i++) {
+            const capsHat = getRandomInt(4) === 1;
+            const hatChars = getRandomInt(5);
+            let extraHat = `ha${new Array(hatChars).join('a')}t`
+
+            if (capsHat) {
+                extraHat = extraHat.toUpperCase();
+            }
+
+            hat += extraHat + ' '
+        }
+        message.channel.send(hat);
+    },
+       
 }
