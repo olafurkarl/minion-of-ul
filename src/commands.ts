@@ -125,5 +125,17 @@ export const commands: Commands = {
             totalNoh += noh + ' '
         }
         message.channel.send(totalNoh);
+    }, 
+    fuk: (message: Discord.Message) => {
+        const something = [
+            'wai fuk nohh',
+            'fuk fuk fuk',
+            'maybe fuk?',
+            'FUK FUK FUK.',
+            'fuk ... perhaaps',
+            'yes, fuk.',
+            'fük'
+        ]
+        message.channel.send(something[getRandomInt(something.length)]);
     }
 }
