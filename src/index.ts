@@ -45,7 +45,7 @@ bot.on('message', message => {
     const command = args.shift().toLowerCase();
 
     if (commands[command]) {
-        commands[command](message, bot);
+        commands[command](message, args);
     }
 });
 

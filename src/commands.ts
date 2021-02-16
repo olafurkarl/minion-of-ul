@@ -21,7 +21,8 @@ const sendIfServerGuildOrPM = (message: Discord.Message, stringToSend: string) =
 }
 
 const getRandomInt = (max: number) => {
-    return Math.floor(Math.random() * Math.floor(max));
+    const rand = Math.random();
+    return Math.floor(rand * max);
 }
 
 const getGoblinMessage = (): string => {
@@ -137,5 +138,14 @@ export const commands: Commands = {
             'fük'
         ]
         message.channel.send(something[getRandomInt(something.length)]);
-    }
+    },
+    random: (message: Discord.Message, args: string[]) => {
+        const numString = args[0];
+        if (numString && !isNaN(parseInt(numString))) {
+            const number = parseInt(numString);
+            const randomNum = getRandomInt(number) + 1;
+            message.channel.send(`Perhaps... ${randomNum}`);
+        }
+        
+    },
 }
