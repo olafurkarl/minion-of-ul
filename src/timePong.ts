@@ -1,5 +1,5 @@
 export const getFormattedTimeAtZone = (timezone: string): string => {
-    let options = {
+    const options: Intl.DateTimeFormatOptions = {
         timeZone: timezone,
         year: 'numeric',
         month: 'numeric',
@@ -8,7 +8,7 @@ export const getFormattedTimeAtZone = (timezone: string): string => {
         minute: 'numeric',
         second: 'numeric',
         hour12: false,
-      },
-    formatter = new Intl.DateTimeFormat([], options);
+      };
+    const formatter = new Intl.DateTimeFormat([], options);
     return formatter.format(new Date());
 }

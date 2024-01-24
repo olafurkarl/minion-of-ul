@@ -1,275 +1,215 @@
-import { config } from "dotenv"
-import * as Discord from 'discord.js'
-import * as fs from 'fs';
+import { config } from "dotenv";
+import { Client, Message, GatewayIntentBits } from "discord.js";
+import * as fs from "fs";
 import { TextChannel } from "discord.js";
-import { commands } from './commands';
-const bot = new Discord.Client();
+import { authCommands, commands } from "./commands";
+import { TOKEN, SAVE_GAME_DIR } from "./env";
+import { startNextTurn } from "./host";
+import { games, updateLocalStorage } from "./games";
+import { readFile } from "./util";
+import { createTurnStatusString, getNationStatus } from "./game-status";
+const bot = new Client({
+  intents: [
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.Guilds,
+  ],
+});
 config();
-const TOKEN = process.env.TOKEN;
-const SERVER_ID = process.env.SERVER_ID;
-const SAVE_GAME_DIR = `${process.env.HOME}/.dominions5/savedgames`
-const games = ['test_omni'];
-
-const columns = {
-    BOT_OR_NOT: 3, 
-    STATUS: 5,
-    NATION: 7
-}
-
-enum TurnStatus { 'not started', 'not finished', 'finished' };
 
 bot.login(TOKEN);
 
 const getChannel = async (name: string) => {
-    const server = await bot.guilds.fetch(SERVER_ID);
-    const channel = <TextChannel> server.channels.cache.find(channel => channel.name === name)
-    return channel;
-}
+  const guilds = await bot.guilds.fetch();
 
-interface GameData {
-    [key: string]: {
-        statusDump: string
-        gamePin: Discord.Message
-        turnStatusPost: Discord.Message;
-        currentTurn: number
+  for (const [key, guild] of guilds) {
+    const server = await guild.fetch();
+    const channelList = await server.channels.fetch();
+    const channel = <TextChannel | undefined>(
+      channelList.find((channel) => channel.name === name)
+    );
+    if (channel) {
+      return channel;
     }
-}
+  }
+  return;
+};
 
-const gameData: GameData = {}
+bot.on("messageCreate", (message: Message) => {
+  const prefix = "!";
+  if (!message.content.startsWith(prefix) || message.author.bot) {
+    return;
+  }
 
-bot.on('message', message => {
-    const prefix = "!";
-    if (!message.content.startsWith(prefix) || message.author.bot) return;
+  const args = message.content.slice(prefix.length).trim().split(/ +/);
+  const command = args.shift().toLowerCase();
 
-    const args = message.content.slice(prefix.length).trim().split(/ +/);
-    const command = args.shift().toLowerCase();
+  console.log("command received", command);
+  if (commands[command]) {
+    console.log("command recognized");
+    commands[command](message, args);
+  }
 
-    if (commands[command]) {
-        commands[command](message, args);
+  if (message.author.tag == "olik") {
+    if (authCommands[command]) {
+      authCommands[command](message, args);
     }
+  } else if (authCommands[command]) {
+    message.channel.send("Restricted command, sry!");
+  }
 });
 
-bot.on('ready', async () => {
+bot.on("ready", async () => {
   console.info(`Logged in as ${bot.user.tag}!`);
 
-  games.forEach(async (game) => {
-    const channel = await getChannel(game);
-    // channel.send("**I live to serve the Ul.**");
+  Object.values(games).forEach(async (game) => {
+    const channel: TextChannel = await getChannel(game.name);
+
+    if (!channel) {
+      return;
+    }
 
     // load initial game data from file system and discord
 
     const pins = await channel.messages.fetchPinned();
-    let gamePin: Discord.Message;
+    let gamePin: Message;
     pins.forEach((pin) => {
-        if (pin.content.includes(`__Game__: ${game}`)) {
-            gamePin = pin;
-        }
-    })
+      if (pin.content.includes(`__Game__: ${game.name}`)) {
+        gamePin = pin;
+      }
+    });
 
-    gameData[game] = {
-        statusDump: '',
+    if (!games[game.name].data) {
+      games[game.name].data = {
         gamePin,
+        currentTurn: -1,
+        players: {},
+        statusDump: "",
         turnStatusPost: undefined,
-        currentTurn: -1
+      };
     }
   });
 
-  games.forEach(async (game) => {
-    const channel = await getChannel(game);
+  console.log("games.length", Object.keys(games).length);
 
-    const filePath = `${SAVE_GAME_DIR}/${game}`;
+  Object.values(games).forEach(async (game) => {
+    const channel = await getChannel(game.name);
+
+    if (!channel) {
+      console.log("channel undefined");
+      return;
+    }
+
+    const filePath = `${SAVE_GAME_DIR}/${game.name}`;
+    console.log("watching filePath", filePath);
+
     fs.watch(filePath, async (event, filename) => {
-        if (filename === 'statusdump.txt' && event === 'change') {
-            const statusDump: string = await readFile(`${filePath}/${filename}`);
-            
-            // no new information, return
-            if (gameData[game] && gameData[game].statusDump === statusDump) {
-                return;
-            }
+      console.log("watch triggered");
+      if (!(filename === "statusdump.txt" && event === "change")) {
+        return;
+      }
+      const statusDump: string = await readFile(`${filePath}/${filename}`);
 
-            console.log('statusDump', statusDump);
-            if (statusDump) {
-                // set statusDump
-                gameData[game].statusDump = statusDump;
-                
-                const lines = statusDump.split('\n');
-                const turn = parseInt(lines[1].split(" ")[1]);
-                if (turn > 0) {
+      // statusDump empty/undefined, return
+      if (!statusDump) {
+        console.log("no statusdump");
+        return;
+      }
 
-                    const nationStatus = getNationStatus(lines);
-                    console.log(nationStatus);
-                    let msg = createTurnStatusString(nationStatus, game, turn);
+      console.log("statusDump", statusDump);
+      const data = game.data;
+      // no new information, return
+      if (data && data.statusDump === statusDump) {
+        console.log("statusDump unchanged");
+        return;
+      }
 
-                    let { turnStatusPost, gamePin } = gameData[game];
+      // set statusDump
+      data.statusDump = statusDump;
 
-                    if (gameData[game].currentTurn != turn) {
-                        gameData[game].currentTurn = turn;
-                        if (turnStatusPost) {
-                            turnStatusPost = undefined;
-                        }
-                    }
+      const lines = statusDump.split("\n");
+      const turn = parseInt(lines[1].split(" ")[1]);
 
-                    if (!turnStatusPost) {
-                        turnStatusPost = await sendWithTimeout(msg, 500, channel);
+      // -1 can mean lobby or in-between turns, do nothing
+      if (turn <= 0) {
+        console.log("turn is -1");
+        return;
+      }
 
-                        // update latest status message
-                        gameData[game].turnStatusPost = turnStatusPost;
-                    } else {
-                        turnStatusPost.edit(msg);
-                    }
+      const nationStatus = getNationStatus(lines);
 
-                    // update pin
-                    if (gamePin) {
-                        gamePin.edit(msg);
-                    } else {
-                        // if we don't have a pin, try to make one
-                        if (turnStatusPost && turnStatusPost.pinnable) {
-                            turnStatusPost.pin();
-                            gameData[game].gamePin = turnStatusPost;
-                        }
-                    }
+      // Received invalid nation status, return
+      if (!nationStatus) {
+        console.log("invalid nation status");
+        return;
+      }
+      let msg = createTurnStatusString(nationStatus, game, turn);
 
-                    // start game if all players except Omniscience have finished
-                    if (nationStatus.hasOmniscience && nationStatus.allDone) {
-                        startNextTurn(game);
-                    }
-                }
-            }
+      let { turnStatusPost, gamePin } = data;
+
+      if (data.currentTurn != turn) {
+        const role = channel.guild.roles.cache.find(
+          (role) => role.name === channel.name
+        );
+
+        if (role) {
+          channel.send(`Turn ${turn} has started! ${role.toString()}`);
         }
+
+        turnStatusPost = undefined;
+
+        data.currentTurn = turn;
+      }
+
+      if (!turnStatusPost) {
+        turnStatusPost = await sendWithTimeout(msg, 500, channel);
+
+        // update latest status message
+        data.turnStatusPost = turnStatusPost;
+      } else {
+        if (!turnStatusPost.edit) {
+          turnStatusPost = await channel.messages.fetch(turnStatusPost.id);
+        }
+        turnStatusPost.edit(msg);
+      }
+
+      // update pin
+      if (gamePin) {
+        if (!gamePin.edit) {
+          gamePin = await channel.messages.fetch(gamePin.id)
+        }
+        gamePin.edit(msg);
+      } else {
+        // if we don't have a pin, try to make one
+        if (turnStatusPost && turnStatusPost.pinnable) {
+          turnStatusPost.pin();
+          data.gamePin = turnStatusPost;
+        }
+      }
+
+      // start game if all players except Omniscience have finished
+      if (nationStatus.hasOmniscience && nationStatus.allDone) {
+        startNextTurn(game.name);
+      }
+
+      updateLocalStorage();
     });
   });
 });
 
-const startNextTurn = (game: string) => {
-    const domCmdPath = `${SAVE_GAME_DIR}/${game}/domcmd`;
-    fs.writeFile(domCmdPath, 'settimeleft 5', (err) => {
-        if (err) return console.log(err);
-        console.log(domCmdPath);
-    });
-}
-
-const readFile = (dir: string): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        fs.readFile(dir, 'utf8', (err, data) => {
-            if (err) {
-                reject(err);
-            }
-            resolve(data);
-        });
-    });
-}
-
-interface Player {
-    nation: string,
-    status: TurnStatus,
-}
-
-interface NationStatus {
-    players: Array<Player>,
-    bots: Array<string>,
-    dead: Array<string>,
-    allDone: boolean,
-    hasOmniscience: boolean,
-}
-
-const getNationStatus = (lines: Array<string>): NationStatus => {
-    const nationStatus: NationStatus = {
-        players: [],
-        bots: [],
-        dead: [],
-        allDone: false,
-        hasOmniscience: false,
-    }
-
-    let done = 0;
-    lines.forEach(line => {
-        const cols = line.split('\t');
-
-        if (cols.length < 9) { // skip header
-            return;
-        }
-
-        const isDead = parseInt(cols[columns.BOT_OR_NOT]) === -1;
-        const isBot = parseInt(cols[columns.BOT_OR_NOT]) === 2;
-
-        const nation = cols[columns.NATION];
-
-        const isOmni = nation === 'Omniscience';
-
-        if (isOmni) {
-            nationStatus.hasOmniscience = true;
-            return;
-        }
-        if (isDead) {
-            nationStatus.dead.push(nation);
-            return;
-        }
-        if (isBot) {
-            nationStatus.bots.push(nation);
-            return;
-        }
-        // we have a player!
-        const status = parseInt(cols[columns.STATUS]);
-        if (status === TurnStatus.finished) {
-            done += 1;
-        }
-        nationStatus.players.push({
-            nation,
-            status,
-        })
-    })
-    if (done === nationStatus.players.length) {
-        nationStatus.allDone = true;
-    }
-    return nationStatus;
-}
-
-const createTurnStatusString = (nationStatus: NationStatus, game: string, turn: number): string => {
-    let msg = `__Game__: ${game} __Turn__: ${turn}`;
-    nationStatus.players.forEach(player => {
-        msg += "\n";
-        const { nation, status } = player;
-        if (status === TurnStatus.finished) {
-            msg += "✅ ";
-        } else {
-            msg += "❌ "
-        }
-        msg += `${nation} has ${TurnStatus[status]} their turn`;
-    });
-    if (nationStatus.bots.length > 0) {
-        msg += "\n🤖 AI: ";
-        for (let i = 0; i < nationStatus.bots.length; i++) {
-            msg += nationStatus.bots[i];
-            if (i !== nationStatus.bots.length - 1) {
-                msg += ", ";
-            }
-        }
-    }
-    if (nationStatus.dead.length > 0) {
-        msg += "\n💀 Dead: ";
-        for (let i = 0; i < nationStatus.dead.length; i++) {
-            msg += nationStatus.dead[i];
-            if (i !== nationStatus.dead.length - 1) {
-                msg += ", ";
-            }
-        }
-    }
-    if (nationStatus.hasOmniscience) {
-        msg += "\n🧿 This game is being watched carefully"
-    }
-    return msg;
-}
-
 let sendTimeout: NodeJS.Timeout;
 
-const sendWithTimeout = async (message: string, timeout: number, channel: TextChannel): Promise<Discord.Message> => {
-    let finalMessage: Discord.Message;
-    return new Promise<Discord.Message>((resolve, reject) => {
-        sendTimeout = setTimeout(async () => {
-            clearTimeout(sendTimeout);
-            finalMessage = await channel.send(message);
-            resolve(finalMessage);
-        }, timeout)
-    })
-}
-
+const sendWithTimeout = async (
+  message: string,
+  timeout: number,
+  channel: TextChannel
+): Promise<Message> => {
+  let finalMessage: Message;
+  return new Promise<Message>((resolve, reject) => {
+    sendTimeout = setTimeout(async () => {
+      clearTimeout(sendTimeout);
+      finalMessage = await channel.send(message);
+      resolve(finalMessage);
+    }, timeout);
+  });
+};
